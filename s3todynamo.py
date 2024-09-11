@@ -15,7 +15,7 @@ def lambda_handler(event, context):
     
     csv_reader = csv.DictReader(StringIO(csv_content))
     
-    table = dynamodb.Table('my-table')
+    table = dynamodb.Table('colors')
 
     for row in csv_reader:
         table.put_item(
