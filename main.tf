@@ -14,13 +14,13 @@ resource "aws_s3_bucket" "my_bucket" {
 
 #Creating dynamodb table    Name,HEX,RGB
 resource "aws_dynamodb_table" "my_dynamo_table" {
-  name = "colors"
-  billing_mode = "PROVISIONED"
-  read_capacity = 5
+  name           = "colors"
+  billing_mode   = "PROVISIONED"
+  read_capacity  = 5
   write_capacity = 5
-  hash_key = "Name"
-  range_key = "HEX"
-  
+  hash_key       = "Name"
+  range_key      = "HEX"
+
   attribute {
     name = "Name"
     type = "S"
@@ -89,11 +89,11 @@ resource "aws_iam_policy_attachment" "attach_policy_to_lambda" {
 
 #Lambda function to process the events
 resource "aws_lambda_function" "lambda_function" {
-  filename         = "fun.zip"
-  function_name    = "s3todynamo"
-  role             = aws_iam_role.aws_execution_role.arn
-  handler          = "s3todynamo.lambda_handler"
-  runtime          = "python3.9"
+  filename      = "fun.zip"
+  function_name = "s3todynamo"
+  role          = aws_iam_role.aws_execution_role.arn
+  handler       = "s3todynamo.lambda_handler"
+  runtime       = "python3.9"
 }
 
 
@@ -104,25 +104,25 @@ resource "aws_lambda_function" "lambda_function" {
 
 #Event Rule for default bus
 resource "aws_cloudwatch_event_rule" "to_custom_bus_rule" {
-  name = "s3_event_rule"
+  name           = "s3_event_rule"
   event_bus_name = "default"
   event_pattern = jsonencode(
     {
-        "source": ["aws.s3"],
-    "detail-type": ["AWS API Call via CloudTrail"],
-    "detail": {
-      "eventSource": ["s3.amazonaws.com"],
-      "eventName": ["PutObject"]
-    }
+      "source" : ["aws.s3"],
+      "detail-type" : ["AWS API Call via CloudTrail"],
+      "detail" : {
+        "eventSource" : ["s3.amazonaws.com"],
+        "eventName" : ["PutObject"]
+      }
     }
   )
 }
 
 #Default bus target
 resource "aws_cloudwatch_event_target" "custom_bus_target" {
-  rule = aws_cloudwatch_event_rule.to_custom_bus_rule.name
+  rule           = aws_cloudwatch_event_rule.to_custom_bus_rule.name
   event_bus_name = "default"
-  arn = aws_cloudwatch_event_bus.my_event_bus.arn
+  arn            = aws_cloudwatch_event_bus.my_event_bus.arn
 }
 
 #/////////////////////////////////////////////////////////////////////////////////////////////
@@ -130,16 +130,16 @@ resource "aws_cloudwatch_event_target" "custom_bus_target" {
 
 #Event Rule for custom bus
 resource "aws_cloudwatch_event_rule" "to_lambda_rule" {
-    name = "s3_event_rule_2"
-    event_bus_name = aws_cloudwatch_event_bus.my_event_bus.name
-    event_pattern = jsonencode(
+  name           = "s3_event_rule_2"
+  event_bus_name = aws_cloudwatch_event_bus.my_event_bus.name
+  event_pattern = jsonencode(
     {
-    "source": ["aws.s3"],
-    "detail-type": ["AWS API Call via CloudTrail"],
-    "detail": {
-      "eventSource": ["s3.amazonaws.com"],
-      "eventName": ["PutObject"]
-    }
+      "source" : ["aws.s3"],
+      "detail-type" : ["AWS API Call via CloudTrail"],
+      "detail" : {
+        "eventSource" : ["s3.amazonaws.com"],
+        "eventName" : ["PutObject"]
+      }
     }
   )
 
@@ -148,9 +148,9 @@ resource "aws_cloudwatch_event_rule" "to_lambda_rule" {
 
 #Custom bus target
 resource "aws_cloudwatch_event_target" "custom_lambda_target" {
-    rule = aws_cloudwatch_event_rule.to_lambda_rule.name
-    event_bus_name = aws_cloudwatch_event_bus.my_event_bus.name
-    arn = aws_lambda_function.lambda_function.arn
+  rule           = aws_cloudwatch_event_rule.to_lambda_rule.name
+  event_bus_name = aws_cloudwatch_event_bus.my_event_bus.name
+  arn            = aws_lambda_function.lambda_function.arn
 }
-  
+
 #/////////////////////////////////////////////////////////////////////////////////////////////
