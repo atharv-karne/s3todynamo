@@ -4,14 +4,63 @@ provider "aws" {
 
 #//////////////////////////////////////////////////////////////////////////////////
 
-#Bucket for storing csv
+# Bucket for storing CSV files
 resource "aws_s3_bucket" "my_bucket" {
   bucket = "csv-bucket-jenkins-unique"
 }
 
-# Log bucket for storing logs
+# Log bucket for storing CloudTrail logs
 resource "aws_s3_bucket" "log-bucket" {
   bucket = "log-bucket-for-cloudtrail-728382"
+}
+
+# IAM Role for CloudTrail to write logs to CloudWatch
+resource "aws_iam_role" "cloudtrail_role" {
+  name = "CloudTrail_Logging_Role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow",
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        },
+        Action = "sts:AssumeRole"
+      }
+    ]
+  })
+}
+
+# IAM Policy for CloudTrail to write logs to CloudWatch
+resource "aws_iam_policy" "cloudtrail_logs_policy" {
+  name   = "CloudTrail_Logs_Policy"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          # "logs:PutLogEvents",
+          # "logs:CreateLogStream",
+          # "logs:CreateLogGroup"
+          "logs:*"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+# Attach the policy to the CloudTrail IAM role
+resource "aws_iam_role_policy_attachment" "cloudtrail_policy_attachment" {
+  role       = aws_iam_role.cloudtrail_role.name
+  policy_arn = aws_iam_policy.cloudtrail_logs_policy.arn
+}
+
+# Create CloudWatch Logs Group for CloudTrail
+resource "aws_cloudwatch_log_group" "cloudtrail_log_group" {
+  name = "/aws/cloudtrail/my-trail-logs"
 }
 
 # Setting bucket policy to allow CloudTrail to write logs
@@ -46,33 +95,29 @@ resource "aws_s3_bucket_policy" "allow_trail_write_logs" {
 resource "aws_cloudtrail" "my_trail" {
   name                          = "my-trail"
   s3_bucket_name                = aws_s3_bucket.log-bucket.bucket
-  # include_global_service_events = true
-  # is_multi_region_trail         = true
-  # enable_log_file_validation    = true
+  include_global_service_events = true
+  is_multi_region_trail         = false
+  is_organization_trail         = false
+
+  cloud_watch_logs_group_arn    = "${aws_cloudwatch_log_group.cloudtrail_log_group.arn}:*"
+  cloud_watch_logs_role_arn     = aws_iam_role.cloudtrail_role.arn
 
   event_selector {
     data_resource {
-      type = "AWS::S3::Object"
+      type   = "AWS::S3::Object"
       values = ["arn:aws:s3:::${aws_s3_bucket.my_bucket.bucket}/"]
     }
     include_management_events = true
   }
 }
 
-
-#Send events to this eventbus using s3 notification
+# Send events to this event bus using S3 notification
 resource "aws_s3_bucket_notification" "s3_eventbridge_notification" {
   bucket      = aws_s3_bucket.my_bucket.id
   eventbridge = true
-
 }
 
-#////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-#Creating dynamodb table    Name,HEX,RGB
+# Creating DynamoDB table
 resource "aws_dynamodb_table" "my_dynamo_table" {
   name           = "colors"
   billing_mode   = "PROVISIONED"
@@ -90,29 +135,22 @@ resource "aws_dynamodb_table" "my_dynamo_table" {
     name = "HEX"
     type = "S"
   }
-  # attribute {
-  #   name = "RGB"
-  #   type = "S"
-  # }
 }
 
-#/////////////////////////////////////////////////////////////////////////////////////////////
+#/////////////////////////////////////////////////////////////////////////////////////
 
-
-#Event Bus
+# Event Bus
 resource "aws_cloudwatch_event_bus" "my_event_bus" {
   name = "my-event-bus"
 }
 
 #/////////////////////////////////////////////////////////////////////////////////////
 
-
-#Assume role policy for lambda
+# Assume role policy for Lambda
 data "aws_iam_policy_document" "assume_role" {
   statement {
     effect  = "Allow"
     actions = ["sts:AssumeRole"]
-
 
     principals {
       type        = "Service"
@@ -121,15 +159,13 @@ data "aws_iam_policy_document" "assume_role" {
   }
 }
 
-#Creating role
+# Creating IAM role for Lambda
 resource "aws_iam_role" "aws_execution_role" {
   name               = "lambda_s3_dynamo_role"
   assume_role_policy = data.aws_iam_policy_document.assume_role.json
 }
 
-
-
-#Creating policy for lambda
+# Creating policy for Lambda
 resource "aws_iam_policy" "lambda_s3_dynamo_policy" {
   name = "custom_lambda_s3_to_dynamo_policy"
   policy = jsonencode({
@@ -138,13 +174,11 @@ resource "aws_iam_policy" "lambda_s3_dynamo_policy" {
       {
         "Effect" : "Allow",
         "Action" : [
-          
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ],
         "Resource" : "arn:aws:logs:*:*:*"
-
       },
       {
         "Effect" : "Allow",
@@ -155,26 +189,23 @@ resource "aws_iam_policy" "lambda_s3_dynamo_policy" {
         "Resource" : "*"
       }
     ]
-    }
-  )
+  })
 }
 
-
-#Policy attachment to role
+# Attach policies to Lambda execution role
 resource "aws_iam_policy_attachment" "attach_policy_to_lambda" {
   name       = "attachment"
   roles      = [aws_iam_role.aws_execution_role.name]
   policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
 }
 
-#Policy attachment to role
 resource "aws_iam_policy_attachment" "attach_policy_to_lambda1" {
   name       = "attachment_1"
   roles      = [aws_iam_role.aws_execution_role.name]
   policy_arn = aws_iam_policy.lambda_s3_dynamo_policy.arn
 }
 
-#Lambda function to process the events
+# Lambda function to process the events
 resource "aws_lambda_function" "lambda_function" {
   filename      = "fun.zip"
   function_name = "s3todynamo"
@@ -183,38 +214,31 @@ resource "aws_lambda_function" "lambda_function" {
   runtime       = "python3.9"
 }
 
-
-#Allowing lambda to be invoked by eventbus
+# Allow Lambda to be invoked by EventBus
 resource "aws_lambda_permission" "allow_by_bus" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.lambda_function.function_name
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_bus.my_event_bus.arn
-
 }
-
-
 
 #/////////////////////////////////////////////////////////////////////////////////////////////
 
-#Event Rule for default bus
+# Event Rule for default bus
 resource "aws_cloudwatch_event_rule" "to_custom_bus_rule" {
   name           = "s3_event_rule"
   event_bus_name = "default"
-  event_pattern = jsonencode(
-    {
-      "source" : ["aws.s3"],
-      "detail-type" : ["AWS API Call via CloudTrail"],
-      "detail" : {
-        "eventSource" : ["s3.amazonaws.com"],
-        "eventName" : ["PutObject"]
-      }
+  event_pattern = jsonencode({
+    "source" : ["aws.s3"],
+    "detail-type" : ["AWS API Call via CloudTrail"],
+    "detail" : {
+      "eventSource" : ["s3.amazonaws.com"],
+      "eventName" : ["PutObject"]
     }
-  )
+  })
 }
 
-
-
+# IAM Role for default event bus target
 resource "aws_iam_role" "default_target_role" {
   name = "default_eventbus_target_role"
   assume_role_policy = jsonencode({
@@ -227,13 +251,12 @@ resource "aws_iam_role" "default_target_role" {
         Principal = {
           Service = "events.amazonaws.com"
         }
-      },
+      }
     ]
   })
 }
 
-
-#policy that allows lambda invoke permission
+# Policy that allows Lambda invoke permission
 resource "aws_iam_policy" "default_bus_policy" {
   name = "default_bus_policy"
   policy = jsonencode({
@@ -252,17 +275,13 @@ resource "aws_iam_policy" "default_bus_policy" {
   })
 }
 
-
-#Attach role to policy
+# Attach policy to the IAM role for default bus
 resource "aws_iam_role_policy_attachment" "default_bus_policy_attachment" {
   role       = aws_iam_role.default_target_role.name
   policy_arn = aws_iam_policy.default_bus_policy.arn
 }
 
-
-
-
-#Default bus target
+# Default bus target
 resource "aws_cloudwatch_event_target" "custom_bus_target" {
   rule           = aws_cloudwatch_event_rule.to_custom_bus_rule.name
   role_arn       = aws_iam_role.default_target_role.arn
@@ -272,31 +291,25 @@ resource "aws_cloudwatch_event_target" "custom_bus_target" {
 
 #/////////////////////////////////////////////////////////////////////////////////////////////
 
-
-#Event Rule for custom bus
+# Event Rule for custom bus
 resource "aws_cloudwatch_event_rule" "to_lambda_rule" {
   name           = "s3_event_rule_2"
   event_bus_name = aws_cloudwatch_event_bus.my_event_bus.name
-  event_pattern = jsonencode(
-    {
-      "source" : ["aws.s3"],
-      "detail-type" : ["AWS API Call via CloudTrail"],
-      "detail" : {
-        "eventSource" : ["s3.amazonaws.com"],
-        "eventName" : ["PutObject"]
-      }
+  event_pattern = jsonencode({
+    "source" : ["aws.s3"],
+    "detail-type" : ["AWS API Call via CloudTrail"],
+    "detail" : {
+      "eventSource" : ["s3.amazonaws.com"],
+      "eventName" : ["PutObject"]
     }
-  )
+  })
 
 }
 
-
-#Custom bus target
-resource "aws_cloudwatch_event_target" "custom_lambda_target" {
-  rule = aws_cloudwatch_event_rule.to_lambda_rule.name
-  # role_arn = 
+resource "aws_cloudwatch_event_target" "custom_bus_target_lambda" {
+  rule           = aws_cloudwatch_event_rule.to_lambda_rule.name
   event_bus_name = aws_cloudwatch_event_bus.my_event_bus.name
   arn            = aws_lambda_function.lambda_function.arn
 }
 
-#/////////////////////////////////////////////////////////////////////////////////////////////
+  
