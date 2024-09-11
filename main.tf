@@ -9,6 +9,56 @@ resource "aws_s3_bucket" "my_bucket" {
   bucket = "csv-bucket-jenkins-unique"
 }
 
+# Log bucket for storing logs
+resource "aws_s3_bucket" "log-bucket" {
+  bucket = "log-bucket-for-cloudtrail-728382"
+}
+
+# Setting bucket policy to allow CloudTrail to write logs
+resource "aws_s3_bucket_policy" "allow_trail_write_logs" {
+  bucket = aws_s3_bucket.log-bucket.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AWSCloudTrailAclCheck"
+        Effect  = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.log-bucket.arn
+      },
+      {
+        Sid    = "AWSCloudTrailWrite"
+        Effect  = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.log-bucket.arn}/*"
+      }
+    ]
+  })
+}
+
+# CloudTrail configuration
+resource "aws_cloudtrail" "my_trail" {
+  name                          = "my-trail"
+  s3_bucket_name                = aws_s3_bucket.log-bucket.bucket
+  # include_global_service_events = true
+  # is_multi_region_trail         = true
+  # enable_log_file_validation    = true
+
+  event_selector {
+    data_resource {
+      type = "AWS::S3::Object"
+      values = ["arn:aws:s3:::${aws_s3_bucket.my_bucket.bucket}/"]
+    }
+    include_management_events = true
+  }
+}
+
 
 #Send events to this eventbus using s3 notification
 resource "aws_s3_bucket_notification" "s3_eventbridge_notification" {
@@ -88,12 +138,21 @@ resource "aws_iam_policy" "lambda_s3_dynamo_policy" {
       {
         "Effect" : "Allow",
         "Action" : [
+          
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ],
         "Resource" : "arn:aws:logs:*:*:*"
 
+      },
+      {
+        "Effect" : "Allow",
+        "Action" : [
+          "s3:GetObject",
+          "s3:ListBucket"
+        ],
+        "Resource" : "*"
       }
     ]
     }
