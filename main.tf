@@ -30,10 +30,10 @@ resource "aws_dynamodb_table" "my_dynamo_table" {
     name = "HEX"
     type = "S"
   }
-  attribute {
-    name = "RGB"
-    type = "S"
-  }
+  # attribute {
+  #   name = "RGB"
+  #   type = "S"
+  # }
 }
 
 #/////////////////////////////////////////////////////////////////////////////////////////////
@@ -97,6 +97,14 @@ resource "aws_lambda_function" "lambda_function" {
 }
 
 
+#Allowing lambda to be invoked by eventbus
+resource "aws_lambda_permission" "allow_by_bus" {
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.lambda_function.function_name
+    principal = "s3.amazonaws.com"
+    source_arn = aws_cloudwatch_event_bus.my_event_bus.arn
+
+}
 
 
 
@@ -118,9 +126,31 @@ resource "aws_cloudwatch_event_rule" "to_custom_bus_rule" {
   )
 }
 
+
+
+resource "aws_iam_role" "default_target_role" {
+  name = "default_eventbus_target_role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Sid    = ""
+        Principal = {
+          Service = "events.amazonaws.com"
+        }
+      },
+    ]
+  })
+}
+
+
+
 #Default bus target
 resource "aws_cloudwatch_event_target" "custom_bus_target" {
   rule           = aws_cloudwatch_event_rule.to_custom_bus_rule.name
+  role_arn       = aws_iam_role.default_target_role.arn
   event_bus_name = "default"
   arn            = aws_cloudwatch_event_bus.my_event_bus.arn
 }
@@ -148,7 +178,8 @@ resource "aws_cloudwatch_event_rule" "to_lambda_rule" {
 
 #Custom bus target
 resource "aws_cloudwatch_event_target" "custom_lambda_target" {
-  rule           = aws_cloudwatch_event_rule.to_lambda_rule.name
+  rule = aws_cloudwatch_event_rule.to_lambda_rule.name
+  # role_arn = 
   event_bus_name = aws_cloudwatch_event_bus.my_event_bus.name
   arn            = aws_lambda_function.lambda_function.arn
 }
