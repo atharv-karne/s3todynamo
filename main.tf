@@ -80,11 +80,41 @@ resource "aws_iam_role" "aws_execution_role" {
 }
 
 
+
+#Creating policy for lambda
+resource "aws_iam_policy" "lambda_s3_dynamo_policy" {
+  name = "custom_lambda_s3_to_dynamo_policy"
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Effect" : "Allow",
+        "Action" : [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        "Resource" : "arn:aws:logs:*:*:*"
+
+      }
+    ]
+    }
+  )
+}
+
+
 #Policy attachment to role
 resource "aws_iam_policy_attachment" "attach_policy_to_lambda" {
   name       = "attachment"
   roles      = [aws_iam_role.aws_execution_role.name]
   policy_arn = "arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess"
+}
+
+#Policy attachment to role
+resource "aws_iam_policy_attachment" "attach_policy_to_lambda1" {
+  name       = "attachment_1"
+  roles      = [aws_iam_role.aws_execution_role.name]
+  policy_arn = aws_iam_policy.lambda_s3_dynamo_policy.arn
 }
 
 #Lambda function to process the events
