@@ -2,9 +2,19 @@ provider "aws" {
   region = "ap-south-1"
 }
 
+#//////////////////////////////////////////////////////////////////////////////////
+
 #Bucket for storing csv
 resource "aws_s3_bucket" "my_bucket" {
   bucket = "csv-bucket-jenkins-unique"
+}
+
+
+#Send events to this eventbus using s3 notification
+resource "aws_s3_bucket_notification" "s3_eventbridge_notification" {
+  bucket      = aws_s3_bucket.my_bucket.id
+  eventbridge = true
+
 }
 
 #////////////////////////////////////////////////////////////////////////////////////
@@ -45,18 +55,6 @@ resource "aws_cloudwatch_event_bus" "my_event_bus" {
 }
 
 #/////////////////////////////////////////////////////////////////////////////////////
-
-
-
-#Send events to this eventbus using s3 notification
-resource "aws_s3_bucket_notification" "s3_eventbridge_notification" {
-  bucket      = aws_s3_bucket.my_bucket.id
-  eventbridge = true
-
-}
-
-#/////////////////////////////////////////////////////////////////////////////////////////////
-
 
 
 #Assume role policy for lambda
@@ -131,7 +129,7 @@ resource "aws_lambda_function" "lambda_function" {
 resource "aws_lambda_permission" "allow_by_bus" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.lambda_function.function_name
-  principal     = "s3.amazonaws.com"
+  principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_bus.my_event_bus.arn
 
 }
