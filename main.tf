@@ -129,10 +129,10 @@ resource "aws_lambda_function" "lambda_function" {
 
 #Allowing lambda to be invoked by eventbus
 resource "aws_lambda_permission" "allow_by_bus" {
-    action = "lambda:InvokeFunction"
-    function_name = aws_lambda_function.lambda_function.function_name
-    principal = "s3.amazonaws.com"
-    source_arn = aws_cloudwatch_event_bus.my_event_bus.arn
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.lambda_function.function_name
+  principal     = "s3.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_bus.my_event_bus.arn
 
 }
 
@@ -174,6 +174,34 @@ resource "aws_iam_role" "default_target_role" {
     ]
   })
 }
+
+
+#policy that allows lambda invoke permission
+resource "aws_iam_policy" "default_bus_policy" {
+  name = "default_bus_policy"
+  policy = jsonencode({
+    "Version" : "2012-10-17",
+    "Statement" : [
+      {
+        "Effect" : "Allow",
+        "Action" : [
+          "lambda:InvokeFunction"
+        ],
+        "Resource" : [
+          aws_lambda_function.lambda_function.arn
+        ]
+      }
+    ]
+  })
+}
+
+
+#Attach role to policy
+resource "aws_iam_role_policy_attachment" "default_bus_policy_attachment" {
+  role       = aws_iam_role.default_target_role.name
+  policy_arn = aws_iam_policy.default_bus_policy.arn
+}
+
 
 
 
