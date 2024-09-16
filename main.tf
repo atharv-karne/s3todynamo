@@ -41,9 +41,9 @@ resource "aws_iam_policy" "cloudtrail_logs_policy" {
       {
         Effect = "Allow",
         Action = [
-          # "logs:PutLogEvents",
-          # "logs:CreateLogStream",
-          # "logs:CreateLogGroup"
+          "logs:PutLogEvents",
+          "logs:CreateLogStream",
+          "logs:CreateLogGroup",
           "logs:*"
         ],
         Resource = "*"
@@ -60,7 +60,7 @@ resource "aws_iam_role_policy_attachment" "cloudtrail_policy_attachment" {
 
 # Create CloudWatch Logs Group for CloudTrail
 resource "aws_cloudwatch_log_group" "cloudtrail_log_group" {
-  name = "/aws/cloudtrail/my-trail-logs"
+  name = "/aws/cloudtrail/custom-my-trail-logs"
 }
 
 # Setting bucket policy to allow CloudTrail to write logs
